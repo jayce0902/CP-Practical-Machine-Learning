@@ -1,0 +1,128 @@
+---
+title: "Coursera Project: Practical Machine Learning Modelling"
+author: "Jayce Jocson"
+date: "2023-08-03"
+output:
+  html_document:
+    theme: journal
+    fig_height: 9
+    fig_width: 9 
+    toc: true
+    toc_float: true
+  pdf_document:
+    latex_engine: xelatex
+    highlight: tango
+---
+
+# Executive Summary
+The objective of this project is to develop a predictive model that can determine the manner in which participants performed an exercise based on the provided dataset. The dataset includes various variables that can be utilized for prediction. The data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants to predict the manner in which they did the exercise. This report outlines the approach taken to build the model, the implementation of cross-validation, estimation of expected out-of-sample error, rationale for method choices, and the prediction results for 20 test cases.
+
+The training and testing data for this project are available in the link below:
+
+*Training Data:*
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv
+
+*Testing Data:*
+
+https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv
+
+*Data of the source can be sourced in this web link:*
+
+http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har
+
+## Methodology
+### Load the data and libraries
+```{r load lib, echo=TRUE, message=FALSE}
+library(caret)
+library(rpart)
+library(rpart.plot)
+library(corrplot)
+library(lattice)
+library(ggplot2)
+set.seed(123)
+
+traindata <- read.csv("pml-training.csv")
+testdata <- read.csv("pml-testing.csv")
+
+dim(traindata)
+dim(testdata)
+```
+
+### Cleaning the training data
+Removing the columns with missing values and irrelevant columns to the response.
+```{r, echo=TRUE}
+# Remove columns with more than 90% missing values
+missing_threshold <- 0.9
+columns_to_keep <- colMeans(is.na(traindata)) < missing_threshold
+traindata <- traindata[, columns_to_keep]
+
+# Remove irrelevant metadata columns (first 7 columns)
+metadata_columns <- 1:7
+traindata <- traindata[, -metadata_columns]
+
+# Identify near-zero variance predictors in the traincsv dataset
+nzv_columns <- nearZeroVar(traindata)
+# Remove near-zero variance columns from the dataset
+traindata <- traindata[, -nzv_columns]
+dim(traindata)
+```
+
+### Create and Test Model
+In this section we will create a model which is Random Forest and split the training data 70% for training set and 
+the remaining 30% will be our testing. Let's begin!
+
+**Create the Random Forest Model**
+```{r, echo=TRUE}
+library(RWeka)
+library(rJava)
+set.seed(123)
+
+#Spitting the Train Data for Training and Testing
+train_ind = sample(1:nrow(traindata), size = floor(0.7*(nrow(traindata))))
+datatrain = traindata[train_ind, ]
+datatest = traindata[-train_ind, ]
+features = 52
+# Convert 'classe' to a nominal attribute
+datatrain$classe <- as.factor(datatrain$classe)
+datatest$classe <- as.factor(datatest$classe)
+#Using Random Forest [Split Train Data]
+RF = make_Weka_classifier("weka/classifiers/trees/RandomForest")
+rfmodel = RF(classe ~ .,
+             data = datatrain, control = Weka_control(K=floor(2*sqrt(features))))
+datatest$predictions = predict(rfmodel, datatest)
+```
+
+**Create Predictions and Confusion Matrix**
+```{r, echo=TRUE}
+evaluate_Weka_classifier(rfmodel,newdata = datatest
+                         ,numFolds = 5, class = TRUE, seed = 1)
+prediction <- predict(rfmodel,datatest)
+conf_mat <- confusionMatrix(prediction, factor(datatest$classe))
+conf_mat
+```
+
+*From our Random Forest, our model reach the metrics of*
+* Accuracy: **99.46%**
+* Out of Sample Error: 0.54%
+
+## Create Prediction in PML Test Data
+After creating the **RF model**, we will test it with the 20 rows to predict the classe response (A - E)
+```{r, echo=TRUE}
+testpredict <- predict(rfmodel, testdata)
+testpredict
+```
+
+## Conclusion
+In this project, a predictive model was successfully developed which turn to be **Random Forest** to determine the manner in which we performed exercises based on the provided dataset. The chosen approach included data preprocessing, feature selection, algorithm selection, cross-validation, hyperparameter tuning, and model evaluation. The model's predictions for the 20 test cases were provided as an output of our final model.
+
+For a detailed analysis, code implementation, and visualization of results, please refer to the [GitHub repository](https://github.com/jayce0902/CP-Practical-Machine-Learning) containing the R markdown and compiled HTML file.
+
+## Appendix: Figures
+I. Correlation Matrix Visualization
+```{r, echo=FALSE}
+library(gplots)
+corr_mat <- cor(datatrain[, -length(names(datatrain))])
+heatmap.2(corr_mat, trace = "none", dendrogram = "none", col = colorRampPalette(c("blue", "beige", "deeppink"))(50))
+```
+
